@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cuotas del Clan</title>
+<style>
+:root{--bg:#0e0f13;--panel:#171922;--line:#262a37;--text:#e8e6df;--mut:#8b8fa0;--gold:#d4a73a;
+--ok:#1f6b45;--okt:#7ee2a8;--late:#7a2634;--latet:#ff9aa8;--pau:#4a3f78;--paut:#c9bdff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:20px;color:var(--gold);letter-spacing:.5px}
+h1 small{display:block;color:var(--mut);font-size:12px;font-weight:400;letter-spacing:0}
+button,input{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+button{cursor:pointer}button:hover{border-color:var(--gold)}
+button.gold{background:var(--gold);color:#1a1405;border-color:var(--gold);font-weight:600}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 20px}
+.bar .sp{flex:1}
+.stats{display:flex;gap:10px;flex-wrap:wrap;padding:0 20px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px}
+.chip b{display:block;font-size:18px;color:var(--gold)}.chip span{color:var(--mut);font-size:12px}
+.legend{display:flex;gap:14px;padding:10px 20px;color:var(--mut);font-size:13px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px}
+.wrap{overflow-x:auto;margin:0 20px 20px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:separate;border-spacing:0;width:100%}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+th{background:#12141b;position:sticky;top:0;font-size:12px;color:var(--mut);font-weight:600}
+th.wk b{display:block;color:var(--text);font-size:14px}
+th.cur,td.cur{box-shadow:inset 0 0 0 1px var(--gold)}
+th.cur b{color:var(--gold)}
+.name{position:sticky;left:0;background:var(--panel);text-align:left;font-weight:600;z-index:2;min-width:140px}
+th.name{background:#12141b;z-index:3}
+td.num{color:var(--mut);font-size:13px}
+td.num.pend{color:var(--latet)}
+td.c{min-width:64px;font-weight:700}
+.C{background:var(--ok);color:var(--okt)}.R{background:var(--late);color:var(--latet)}
+.P{background:var(--pau);color:var(--paut)}.N{color:#3a3f50}
+.adm td.c{cursor:pointer}.adm td.c:hover{filter:brightness(1.35)}
+.del{background:none;border:0;color:var(--mut);padding:0 6px;display:none}
+.adm .del{display:inline}.del:hover{color:var(--latet)}
+.panel{display:none;margin:0 20px 14px;padding:14px;background:var(--panel);border:1px solid var(--gold);border-radius:12px;gap:10px;flex-wrap:wrap;align-items:center}
+.adm .panel{display:flex}
+.note{margin:0 20px 20px;color:var(--mut);font-size:13px}
+.dirty{color:var(--gold);font-size:13px}
+@media(max-width:600px){th,td{padding:6px}.hide-m{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚔ Cuotas del Clan<small>Control semanal de pagos</small></h1>
+  <div>
+    <span class="dirty" id="dirty"></span>
+    <button id="login">🔒 Admin</button>
+  </div>
+</header>
+
+<div class="panel" id="panel">
+  <b style="color:var(--gold)">Nuevo miembro</b>
+  <input id="newName" placeholder="Nombre del personaje">
+  <input id="newDate" type="date" title="Fecha de entrada">
+  <button class="gold" id="add">Añadir</button>
+  <span class="sp" style="flex:1"></span>
+  <button id="export">⬇ Descargar data.json</button>
+  <button id="discard" title="Vuelve a los datos publicados">Descartar cambios</button>
+</div>
+
+<div class="stats" id="stats"></div>
+<div class="legend">
+  <span><i style="background:var(--ok)"></i>Cuota pagada</span>
+  <span><i style="background:var(--late)"></i>Retraso</span>
+  <span><i style="background:var(--pau)"></i>Pausa</span>
+  <span><i style="border:1px solid #3a3f50"></i>Sin dato</span>
+  <span id="hint"></span>
+</div>
+
+<div class="bar">
+  <input id="q" placeholder="Buscar personaje…" style="min-width:200px">
+  <span class="sp"></span>
+  <button id="prev">◀</button><button id="today">Hoy</button><button id="next">▶</button>
+</div>
+
+<div class="wrap" id="wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+<p class="note" id="note"></p>
+
+<script>
+/* ===== CONFIGURACIÓN ===== */
+const ADMIN_PIN = "1234";          // cámbialo. OJO: es solo una barrera visual (ver nota abajo)
+const CUOTA = 200000;              // valor de cada cuota semanal
+const START = new Date(2026,7,31); // lunes de la semana 0 (S36)
+const TOTAL_WEEKS = 52, VISIBLE = 10;
+
+/* ===== DATOS INICIALES (se usan si no existe data.json) ===== */
+const m=(n,f,h,d,w)=>({n,f,h,d,w});
+const SEED={members:[
+m("Bargan","2026-06-08",3500000,0,"CCCCCCCC"),m("Boogaloo","2026-07-20",150000,0,"CCCCCCCR"),
+m("Halliwell","2026-05-11",3050000,100000,"CCCCCCCC"),m("Langen","2026-05-11",2900000,0,"CCCCCCRR"),
+m("Lycaon","2026-07-13",200000,0,"CCCCCCCCCC"),m("Macumba","2026-07-13",400000,0,"CCCCCCCC"),
+m("Orchid","2026-06-29",600000,0,"CCCCCCCR"),m("Uve","2026-05-11",3050000,100000,"CCCCCCCC"),
+m("Zurko","2026-05-25",1800000,0,"PPCCCRRR"),m("glasy","2026-07-20",150000,0,"CCCRRRRR"),
+m("Narfg","2026-08-29",0,0,"CCCCRRRR"),m("Pupita","2026-08-29",0,0,"CCRRRRRR"),
+m("Thranduil","2026-08-29",0,0,"RRRRRRRR"),m("AED","2026-06-15",3400000,700000,"CCCCCCCCC"),
+m("Pss","2026-05-11",0,0,"CCCCCCRR"),m("Saturos","2026-09-07",0,0,"CRRRRRRR"),
+m("Aledor","2026-09-07",0,0,"-CCCCCRR"),m("Gatete","2026-09-29",0,0,""),
+m("Darkgabo","2026-09-29",0,0,""),m("Marcee","2026-09-29",0,0,""),
+m("Sirdene","2026-10-03",0,0,""),m("Mokonga","2026-10-05",0,0,"")]};
+
+/* ===== ESTADO ===== */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>n.toLocaleString('es-ES');
+const DRAFT='clan-cuotas-draft';
+let data=SEED, published=SEED, admin=sessionStorage.getItem('clan-admin')==='1', off=0, filter='';
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const weekOf=d=>{const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);
+  return Math.ceil(((t-Date.UTC(t.getUTCFullYear(),0,1))/864e5+1)/7)};
+const curWeek=()=>Math.floor((new Date().setHours(0,0,0,0)-START)/(7*864e5));
+const get=(mb,i)=>mb.w[i]||'-';
+function set(mb,i,v){let a=mb.w.split('');while(a.length<=i)a.push('-');a[i]=v;mb.w=a.join('').replace(/-+$/,'')}
+
+async function load(){
+  try{const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});if(r.ok)published=await r.json()}catch(e){}
+  data=published;
+  if(admin){try{const d=localStorage.getItem(DRAFT);if(d)data=JSON.parse(d)}catch(e){}}
+  off=Math.max(0,Math.min(TOTAL_WEEKS-VISIBLE,curWeek()-VISIBLE+3));
+  render();
+}
+function save(){
+  data.updated=new Date().toISOString();
+  try{localStorage.setItem(DRAFT,JSON.stringify(data))}catch(e){}
+  render();
+}
+
+/* ===== RENDER ===== */
+function render(){
+  document.body.classList.toggle('adm',admin);
+  $('login').textContent=admin?'🔓 Salir de admin':'🔒 Admin';
+  $('hint').textContent=admin?'· Pulsa una casilla para cambiarla: vacío → pagada → retraso → pausa':'';
+  $('dirty').textContent=admin&&localStorage.getItem(DRAFT)?'● Cambios sin publicar':'';
+  const cur=curWeek(), weeks=[...Array(VISIBLE)].map((_,k)=>off+k).filter(i=>i<TOTAL_WEEKS);
+  $('thead').innerHTML='<tr><th class="name">Miembro</th><th class="hide-m">Entrada</th><th>Pagado</th><th>Pendiente</th>'+
+    weeks.map(i=>{const d=addDays(START,i*7);
+      return `<th class="wk ${i===cur?'cur':''}"><b>S${weekOf(d)}</b>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}</th>`}).join('')+'</tr>';
+  const list=data.members.map((mb,ix)=>({mb,ix})).filter(o=>o.mb.n.toLowerCase().includes(filter));
+  $('tbody').innerHTML=list.map(({mb,ix})=>{
+    const paid=[...mb.w].filter(c=>c==='C').length*CUOTA, late=[...mb.w].filter(c=>c==='R').length*CUOTA;
+    const f=mb.f?mb.f.split('-').reverse().join('/'):'';
+    return `<tr><td class="name">${esc(mb.n)}<button class="del" data-del="${ix}" title="Eliminar">✕</button></td>
+      <td class="num hide-m">${f}</td><td class="num">${fmt(paid)}</td><td class="num ${late?'pend':''}">${late?fmt(late):'—'}</td>`+
+      weeks.map(i=>{const v=get(mb,i);
+        return `<td class="c ${v==='-'?'N':v} ${i===cur?'cur':''}" data-m="${ix}" data-w="${i}" title="${{C:'Cuota pagada',R:'Retraso',P:'Pausa','-':'Sin dato'}[v]}">${{C:'✓',R:'✕',P:'⏸','-':'·'}[v]}</td>`}).join('')+'</tr>'}).join('')
+    ||'<tr><td colspan="99" style="padding:30px;color:var(--mut)">Sin resultados</td></tr>';
+  const wk=cur>=0?cur:0, act=data.members.length;
+  const late=data.members.filter(x=>get(x,wk)==='R').length, ok=data.members.filter(x=>get(x,wk)==='C').length;
+  $('stats').innerHTML=[[act,'Miembros'],[ok,'Pagadas esta semana'],[late,'En retraso esta semana'],
+    [fmt(data.members.reduce((s,x)=>s+[...x.w].filter(c=>c==='C').length*CUOTA,0)),'Total cobrado']]
+    .map(([b,s])=>`<div class="chip"><b>${b}</b><span>${s}</span></div>`).join('');
+  $('note').textContent=data.updated?'Última actualización: '+new Date(data.updated).toLocaleString('es-ES'):'';
+}
+
+/* ===== EVENTOS ===== */
+$('tbody').addEventListener('click',e=>{
+  if(!admin)return;
+  const del=e.target.closest('[data-del]');
+  if(del){const mb=data.members[+del.dataset.del];if(confirm('¿Eliminar a '+mb.n+'?')){data.members.splice(+del.dataset.del,1);save()}return}
+  const c=e.target.closest('td.c');if(!c)return;
+  const mb=data.members[+c.dataset.m], i=+c.dataset.w, order=['-','C','R','P'];
+  set(mb,i,order[(order.indexOf(get(mb,i))+1)%4]);save();
+});
+$('login').onclick=()=>{
+  if(admin){admin=false;sessionStorage.removeItem('clan-admin');data=published;render();return}
+  if(prompt('PIN de administrador:')===ADMIN_PIN){
+    admin=true;sessionStorage.setItem('clan-admin','1');
+    try{const d=localStorage.getItem(DRAFT);if(d)data=JSON.parse(d)}catch(e){}
+    render();
+  }else alert('PIN incorrecto');
+};
+$('add').onclick=()=>{
+  const n=$('newName').value.trim();if(!n)return;
+  if(data.members.some(x=>x.n.toLowerCase()===n.toLowerCase()))return alert('Ese personaje ya existe');
+  data.members.push({n,f:$('newDate').value||new Date().toISOString().slice(0,10),h:0,d:0,w:''});
+  $('newName').value='';save();
+};
+$('newName').addEventListener('keydown',e=>{if(e.key==='Enter')$('add').click()});
+$('export').onclick=()=>{
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='data.json';a.click();
+  alert('Sube este data.json al repositorio (junto al HTML) para publicar los cambios.');
+};
+$('discard').onclick=()=>{if(confirm('¿Descartar los cambios sin publicar?')){localStorage.removeItem(DRAFT);data=published;render()}};
+$('q').oninput=e=>{filter=e.target.value.toLowerCase();render()};
+$('prev').onclick=()=>{off=Math.max(0,off-4);render()};
+$('next').onclick=()=>{off=Math.min(TOTAL_WEEKS-VISIBLE,off+4);render()};
+$('today').onclick=()=>{off=Math.max(0,Math.min(TOTAL_WEEKS-VISIBLE,curWeek()-VISIBLE+3));render()};
+$('newDate').value=new Date().toISOString().slice(0,10);
+load();
+</script>
+</body>
+</html>
